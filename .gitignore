@@ -1,1 +1,7 @@
-/build/
+# .NET build output
+[Bb]in/
+[Oo]bj/
+
+# IDE and local SDK files
+.vs/
+.dotnet/

@@ -1,7 +1,13 @@
-# .NET build output
+# CMake build output
+/build/
+/out/
+/cmake-build-*/
+CMakeUserPresets.json
+
+# Legacy .NET build output
 [Bb]in/
 [Oo]bj/
 
-# IDE and local SDK files
+# IDE files
 .vs/
-.dotnet/
+*.user

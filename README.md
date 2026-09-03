@@ -1,6 +1,6 @@
 # Render Lab
 
-一个以 C#、Direct3D 11 和 [Vortice.Windows](https://github.com/amerkoleci/Vortice.Windows) 实现的迷你实时渲染管线学习工程。
+一个以 C++、Win32 和 Direct3D 11 实现的迷你实时渲染管线学习工程。
 
 这里不使用游戏引擎，也不尝试做通用引擎。目标是亲手完成一个可观察、可调试的场景渲染器，理解 CPU 如何提交命令，以及 GPU 如何处理资源、几何、深度、像素着色和混合。
 
@@ -60,7 +60,7 @@ finalColor = srcColor * srcAlpha + dstColor * (1 - srcAlpha)
 
 ## 里程碑
 
-1. **00 - Hello Triangle**：WinForms 窗口、Direct3D 11 Device、DXGI Swap Chain、HLSL Shader 和 `Draw(3)`。
+1. **00 - Hello Triangle**：Win32 窗口、Direct3D 11 Device、DXGI Swap Chain、HLSL Shader 和 `Draw(3)`。
 2. **01 - Frame foundation**：清屏、帧同步和窗口 resize。
 3. **02 - Geometry and depth**：三角形、索引立方体、MVP 变换、Depth Buffer、背面剔除。
 4. **03 - Scene and transparency**：导入 Mesh/Texture、相机、材质、Blend State、透明排序。
@@ -95,11 +95,13 @@ finalColor = srcColor * srcAlpha + dstColor * (1 - srcAlpha)
 
 ## Setup
 
-安装 [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)、Windows 10 或更新版本，以及当前显卡驱动。Direct3D 11 Runtime 由 Windows 提供；不要安装已废弃的 DirectX SDK。
+安装 Visual Studio 的“使用 C++ 的桌面开发”工作负载、CMake、Windows 10 或更新版本，以及当前显卡驱动。Direct3D 11 Runtime 由 Windows 提供；不要安装已废弃的 DirectX SDK。
+
+初始工程只提供 CMake、一个空的 Win32 程序入口和一个空的 HLSL 文件。窗口、Device、Swap Chain 与绘制代码均留作练习实现。
 
 ```powershell
-dotnet build .\\RenderLab.sln
-dotnet run --project .\\src\\RenderLab
+cmake --preset vs2022-debug
+cmake --build --preset vs2022-debug
 ```
 
-当前可执行程序处于 **00 - Hello Triangle**。运行后应显示深色背景上的红绿蓝三角形。
+完成第一个里程碑后，可执行程序应显示深色背景上的红绿蓝三角形。

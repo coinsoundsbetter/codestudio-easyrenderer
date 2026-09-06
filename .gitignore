@@ -10,4 +10,5 @@ CMakeUserPresets.json
 
 # IDE files
 .vs/
+.idea/
 *.user

@@ -4,6 +4,12 @@ namespace SoftwareRendering;
 
 public class Utils {
 
+    // U x V = UxVy - UyVx
+    // A->B 与 A->P 叉积
+    public static float Edge(Vertex a, Vertex b, float px, float py) {
+        return (b.X - a.X) * (py - a.Y) - (b.Y - a.Y) * (px - a.X);
+    }
+    
     // 判断一个像素中心是否在定义的三角形范围内
     public static bool IsInTriangle(float px, float py, Triangle triangle) {
         var v0 = triangle.V0;

@@ -24,19 +24,11 @@ internal static class Program
             var nearTriangle = new Triangle
             {
                 V0 = new Vertex { X = 180, Y = 120, Z = 0.1f, Color = Color.Red },
-                V1 = new Vertex { X = 620, Y = 180, Z = 0.2f, Color = Color.Red },
-                V2 = new Vertex { X = 350, Y = 480, Z = 0.9f, Color = Color.Red },
-            };
-
-            var farTriangle = new Triangle
-            {
-                V0 = new Vertex { X = 260, Y = 100, Z = 0.8f, Color = Color.Green },
-                V1 = new Vertex { X = 700, Y = 420, Z = 0.1f, Color = Color.Green },
-                V2 = new Vertex { X = 180, Y = 520, Z = 0.8f, Color = Color.Green },
+                V1 = new Vertex { X = 350, Y = 480, Z = 0.9f, Color = Color.Red },
+                V2 = new Vertex { X = 620, Y = 180, Z = 0.2f, Color = Color.Red },
             };
             
             Rasterizer.DrawTriangle(frameBuffer, depthBuffer, nearTriangle);
-            Rasterizer.DrawTriangle(frameBuffer, depthBuffer, farTriangle);
             
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {

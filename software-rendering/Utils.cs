@@ -9,6 +9,12 @@ public class Utils {
     public static float Edge(Vertex a, Vertex b, float px, float py) {
         return (b.X - a.X) * (py - a.Y) - (b.Y - a.Y) * (px - a.X);
     }
+
+    // A->B
+    // A->C
+    public static float Edge(Vertex a, Vertex b, Vertex c) {
+        return (b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X);
+    }
     
     // 判断一个像素中心是否在定义的三角形范围内
     public static bool IsInTriangle(float px, float py, Triangle triangle) {

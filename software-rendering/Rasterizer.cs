@@ -10,10 +10,18 @@ public class Rasterizer {
         DepthBuffer depthBuffer,
         Triangle triangle) {
         
+        //叉积 = (横x竖 - 竖x横)
         //平行四边形的面积 = (v0->v1)与(v0->v2)的叉积和
         var v0 = triangle.V0;
         var v1 = triangle.V1;
         var v2 = triangle.V2;
+        
+        //对于当前屏幕坐标系:y向下; 因此, V0->V1与V0->V2 的叉积来说,正值代表顺时针、负值代表逆时针
+        //这三个顶点不满足我们当前顺时针的正面规则,不绘制
+        if (Utils.Edge(v0, v1, v2) < 0) {
+            return;
+        }
+        
         var area = Utils.Edge(v0, v1, v2.X, v2.Y);
         
         //三点共线或重合

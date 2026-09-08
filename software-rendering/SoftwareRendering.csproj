@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="AssimpNetter" Version="6.0.5" />
     <PackageReference Include="Raylib-cs" Version="8.1.0" />
   </ItemGroup>
 

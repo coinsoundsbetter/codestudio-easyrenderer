@@ -47,6 +47,7 @@ internal static class Program
     private static void DrawModel(FrameBuffer frameBuffer, DepthBuffer depthBuffer, Model model, int screenWidth, int screenHeight) {
         //模型空间
         var m = Matrix4x4.Identity;
+        model.Transform = Matrix4x4.CreateTranslation(1f, 0f, 0f);
         //观察空间
         var cameraPos = new Vector3(0, 0, -1f);
         var cameraTarget = Vector3.Zero;

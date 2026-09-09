@@ -6,6 +6,9 @@ public class FrameBuffer {
     private Color[] m_Pixels;
     private int m_Width;
     private int m_Height;
+
+    public int Width => m_Width;
+    public int Height => m_Height;
     
     public FrameBuffer(int width, int height) {
         m_Pixels = new Color[width * height];

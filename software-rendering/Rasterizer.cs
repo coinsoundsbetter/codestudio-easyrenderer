@@ -30,8 +30,12 @@ public class Rasterizer {
         }
         
         var boundingBox = Utils.GetBoundingBox(triangle);
-        for (int y = boundingBox.MinY; y < boundingBox.MaxY; y++) {
-            for (int x = boundingBox.MinX; x < boundingBox.MaxX; x++) {
+        int minX = Utils.Max(boundingBox.MinX, 0);
+        int minY = Utils.Max(boundingBox.MinY, 0);
+        int maxX = Utils.Min(boundingBox.MaxX, frameBuffer.Width);
+        int maxY = Utils.Min(boundingBox.MaxY, frameBuffer.Height);
+        for (int y = minY; y < maxY; y++) {
+            for (int x = minX; x < maxX; x++) {
                 //对于当前屏幕坐标的约定是左上角为(0,0),x向右增大,y向下增大
                 //x/y分别表示像素格左上角的坐标,要得到像素格子中心,两个方向都要移动半个像素
                 //得到像素中心,用来更精确地计算几何关系

@@ -64,4 +64,20 @@ public class Utils {
             MaxY = (int)MathF.Ceiling(maxY),
         };
     }
+
+    public static int Max(int a, int b) {
+        if (a >= b) {
+            return a;
+        }
+
+        return b;
+    }
+
+    public static int Min(int a, int b) {
+        if (a <= b) {
+            return a;
+        }
+
+        return b;
+    }
 }

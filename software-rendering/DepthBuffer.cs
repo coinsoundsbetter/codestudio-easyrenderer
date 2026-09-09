@@ -16,6 +16,10 @@ public class DepthBuffer {
     }
 
     public void SetDepth(int x, int y, float depth) {
+        if (x < 0 || x >= m_Width || y < 0 || y >= m_Height) {
+            return;
+        }
+        
         m_Depths[y * m_Width + x] = depth;
     }
 

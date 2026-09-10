@@ -6,6 +6,15 @@ namespace SoftwareRendering;
 
 internal static class Program
 {
+    private static readonly ClipPlane[] FrustumPlanes = [
+        ClipPlane.Left,
+        ClipPlane.Right,
+        ClipPlane.Bottom,
+        ClipPlane.Top,
+        ClipPlane.Near,
+        ClipPlane.Far,
+    ];
+
     [STAThread]
     private static void Main() {
         var width = 800;
@@ -91,8 +100,9 @@ internal static class Program
                 var clipV0 = clipVertices[mesh.Indices[j]];
                 var clipV1 = clipVertices[mesh.Indices[j + 1]];
                 var clipV2 = clipVertices[mesh.Indices[j + 2]];
-                //近平面裁剪
-                var clippedVertices = ClipTriangleAgainstNearPlane(
+                // 齐次裁剪空间内的完整视锥裁剪。
+                // 必须在透视除法之前完成，因为所有平面都依赖 w。
+                var clippedVertices = ClipTriangleAgainstFrustum(
                     clipV0,
                     clipV1,
                     clipV2);
@@ -187,32 +197,70 @@ internal static class Program
         };
     }
 
-    private static List<ClipVertex> ClipTriangleAgainstNearPlane(ClipVertex v0, ClipVertex v1, ClipVertex v2) {
-        var input = new[] { v0, v1, v2 };
+    private static List<ClipVertex> ClipTriangleAgainstFrustum(ClipVertex v0, ClipVertex v1, ClipVertex v2) {
+        var polygon = new List<ClipVertex> { v0, v1, v2 };
+
+        foreach (var plane in FrustumPlanes) {
+            polygon = ClipPolygonAgainstPlane(polygon, plane);
+            if (polygon.Count == 0) {
+                break;
+            }
+        }
+
+        return polygon;
+    }
+
+    // Sutherland-Hodgman：将一个凸多边形裁剪到单个齐次平面内。
+    private static List<ClipVertex> ClipPolygonAgainstPlane(
+        IReadOnlyList<ClipVertex> input,
+        ClipPlane plane) {
         var output = new List<ClipVertex>();
-        for (int i = 0; i < input.Length; i++) {
+
+        for (int i = 0; i < input.Count; i++) {
             var current = input[i];
-            var next = input[(i + 1) % input.Length];
-            var currentInside = current.Pos.Z >= 0f;
-            var nextInside = next.Pos.Z >= 0f;
+            var next = input[(i + 1) % input.Count];
+            var currentDistance = GetPlaneDistance(current.Pos, plane);
+            var nextDistance = GetPlaneDistance(next.Pos, plane);
+            var currentInside = currentDistance >= 0f;
+            var nextInside = nextDistance >= 0f;
+
             if (currentInside && nextInside) {
                 output.Add(next);
             }
             else if (currentInside && !nextInside) {
-                output.Add(IntersectNearPlane(current, next));
+                output.Add(Intersect(current, next, currentDistance, nextDistance));
             } 
             else if (!currentInside && nextInside) {
-                output.Add(IntersectNearPlane(current, next));
+                output.Add(Intersect(current, next, currentDistance, nextDistance));
                 output.Add(next);
             }
         }
-        
+
         return output;
     }
 
-    private static ClipVertex IntersectNearPlane(ClipVertex a, ClipVertex b) {
-        var t = a.Pos.Z / (a.Pos.Z - b.Pos.Z);
-        var clipVertex = new ClipVertex() {
+    // 平面内侧统一表示为 distance >= 0。
+    private static float GetPlaneDistance(Vector4 position, ClipPlane plane) {
+        return plane switch {
+            ClipPlane.Left => position.X + position.W, // x >= -w
+            ClipPlane.Right => position.W - position.X, // x <=  w
+            ClipPlane.Bottom => position.Y + position.W, // y >= -w
+            ClipPlane.Top => position.W - position.Y, // y <=  w
+            ClipPlane.Near => position.Z, // z >= 0
+            ClipPlane.Far => position.W - position.Z, // z <= w
+            _ => throw new ArgumentOutOfRangeException(nameof(plane)),
+        };
+    }
+
+    private static ClipVertex Intersect(
+        ClipVertex a,
+        ClipVertex b,
+        float distanceA,
+        float distanceB) {
+        // A + t(B - A) 落到平面上时，distance = 0。
+        var t = distanceA / (distanceA - distanceB);
+
+        return new ClipVertex {
             Pos = Vector4.Lerp(a.Pos, b.Pos, t),
             Color = new Color(
                 (byte)(a.Color.R + (b.Color.R - a.Color.R) * t),
@@ -220,6 +268,5 @@ internal static class Program
                 (byte)(a.Color.B + (b.Color.B - a.Color.B) * t),
                 (byte)(a.Color.A + (b.Color.A - a.Color.A) * t)),
         };
-        return clipVertex;
     }
 }

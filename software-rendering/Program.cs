@@ -23,7 +23,21 @@ internal static class Program
             "box.fbx");
         var model = LoadModel(modelPath);
 
+        var modelZ = 0f;
+        const float modelMoveSpeed = 1f;
+
         while (!Raylib.WindowShouldClose()) {
+
+            var delta = Raylib.GetFrameTime();
+            if (Raylib.IsKeyDown(KeyboardKey.S)) {
+                modelZ -= modelMoveSpeed * delta;
+            }
+            if (Raylib.IsKeyDown(KeyboardKey.W)) {
+                modelZ += modelMoveSpeed * delta;
+            }
+
+            model.Transform = Matrix4x4.CreateTranslation(1f, 0f, modelZ);
+            
             Raylib.BeginDrawing();
 
             frameBuffer.Clear(Color.Black);
@@ -46,8 +60,8 @@ internal static class Program
 
     private static void DrawModel(FrameBuffer frameBuffer, DepthBuffer depthBuffer, Model model, int screenWidth, int screenHeight) {
         //模型空间
-        var m = Matrix4x4.Identity;
-        model.Transform = Matrix4x4.CreateTranslation(1f, 0f, 0f);
+        /*var m = Matrix4x4.Identity;
+        model.Transform = Matrix4x4.CreateTranslation(1f, 0f, 0f);*/
         //观察空间
         var cameraPos = new Vector3(0, 0, -1f);
         var cameraTarget = Vector3.Zero;
@@ -63,34 +77,39 @@ internal static class Program
         var mvp = model.Transform * view * projection;
         for (int i = 0; i < model.Meshes.Length; i++) {
             var mesh = model.Meshes[i];
-            var screenVertices = new Vertex[mesh.Vertices.Length];
+            var clipVertices = new ClipVertex[mesh.Vertices.Length];
             for (int j = 0; j < mesh.Vertices.Length; j++) {
                 var vertex = mesh.Vertices[j];
-                var clipPos = Vector4.Transform(new Vector4(vertex.X, vertex.Y, vertex.Z, 1f), mvp);
-                var ndc = new Vector3(
-                    clipPos.X / clipPos.W,
-                    clipPos.Y / clipPos.W,
-                    clipPos.Z / clipPos.W);
-                var pX = (ndc.X + 1) * 0.5f * screenWidth;
-                var py = (1 - ndc.Y) * 0.5f * screenHeight;
-                var pz = ndc.Z;
-                screenVertices[j] = new Vertex() {
-                    X = pX,
-                    Y = py,
-                    Z = pz,
+                clipVertices[j] = new ClipVertex() {
+                    Pos = Vector4.Transform(
+                        new Vector4(vertex.X, vertex.Y, vertex.Z, 1f),
+                        mvp),
                     Color = vertex.Color,
                 };
             }
             for (int j = 0; j < mesh.Indices.Length; j+=3) {
-                var v0 = screenVertices[mesh.Indices[j]];
-                var v1 = screenVertices[mesh.Indices[j + 1]];
-                var v2 = screenVertices[mesh.Indices[j + 2]];
-                var triangle = new Triangle() {
-                    V0 = v0,
-                    V1 = v1,
-                    V2 = v2,
-                };
-                Rasterizer.DrawTriangle(frameBuffer, depthBuffer, triangle);
+                var clipV0 = clipVertices[mesh.Indices[j]];
+                var clipV1 = clipVertices[mesh.Indices[j + 1]];
+                var clipV2 = clipVertices[mesh.Indices[j + 2]];
+                //近平面裁剪
+                var clippedVertices = ClipTriangleAgainstNearPlane(
+                    clipV0,
+                    clipV1,
+                    clipV2);
+                if (clippedVertices.Count < 3) {
+                    continue;
+                }
+
+                //扇形三角化
+                for (int k = 1; k < clippedVertices.Count - 1; k++) {
+                    var triangle = new Triangle() {
+                        V0 = ToScreenVertex(clippedVertices[0], screenWidth, screenHeight),
+                        V1 = ToScreenVertex(clippedVertices[k], screenWidth, screenHeight),
+                        V2 = ToScreenVertex(clippedVertices[k+1], screenWidth, screenHeight),
+                    };
+                    Rasterizer.DrawTriangle(frameBuffer, depthBuffer, triangle);
+                }
+                
             }
         }
     }
@@ -152,5 +171,55 @@ internal static class Program
             Vertices = vertices,
             Indices = indices.ToArray(),
         };
+    }
+
+    private static Vertex ToScreenVertex(ClipVertex clipVertex, int screenWidth, int screenHeight) {
+        var clipPos = clipVertex.Pos;
+        var ndc = new Vector3(
+            clipPos.X / clipPos.W,
+            clipPos.Y / clipPos.W,
+            clipPos.Z / clipPos.W);
+        return new Vertex {
+            X = (ndc.X + 1f) * 0.5f * screenWidth,
+            Y = (1f - ndc.Y) * 0.5f * screenHeight,
+            Z = ndc.Z,
+            Color = clipVertex.Color,
+        };
+    }
+
+    private static List<ClipVertex> ClipTriangleAgainstNearPlane(ClipVertex v0, ClipVertex v1, ClipVertex v2) {
+        var input = new[] { v0, v1, v2 };
+        var output = new List<ClipVertex>();
+        for (int i = 0; i < input.Length; i++) {
+            var current = input[i];
+            var next = input[(i + 1) % input.Length];
+            var currentInside = current.Pos.Z >= 0f;
+            var nextInside = next.Pos.Z >= 0f;
+            if (currentInside && nextInside) {
+                output.Add(next);
+            }
+            else if (currentInside && !nextInside) {
+                output.Add(IntersectNearPlane(current, next));
+            } 
+            else if (!currentInside && nextInside) {
+                output.Add(IntersectNearPlane(current, next));
+                output.Add(next);
+            }
+        }
+        
+        return output;
+    }
+
+    private static ClipVertex IntersectNearPlane(ClipVertex a, ClipVertex b) {
+        var t = a.Pos.Z / (a.Pos.Z - b.Pos.Z);
+        var clipVertex = new ClipVertex() {
+            Pos = Vector4.Lerp(a.Pos, b.Pos, t),
+            Color = new Color(
+                (byte)(a.Color.R + (b.Color.R - a.Color.R) * t),
+                (byte)(a.Color.G + (b.Color.G - a.Color.G) * t),
+                (byte)(a.Color.B + (b.Color.B - a.Color.B) * t),
+                (byte)(a.Color.A + (b.Color.A - a.Color.A) * t)),
+        };
+        return clipVertex;
     }
 }

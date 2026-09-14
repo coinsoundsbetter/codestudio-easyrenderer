@@ -8,7 +8,8 @@ public class Rasterizer {
     public static void DrawTriangle(
         FrameBuffer frameBuffer, 
         DepthBuffer depthBuffer,
-        Triangle triangle) {
+        Triangle triangle,
+        Texture texture) {
         
         //叉积 = (横x竖 - 竖x横)
         //平行四边形的面积 = (v0->v1)与(v0->v2)的叉积和
@@ -60,11 +61,13 @@ public class Rasterizer {
                 depthBuffer.SetDepth(x, y, depth);
                 
                 //根据当前坐标与三个顶点之间的关系(也就是面积比例),插值得到当前的rgba
-                var drawColor = new Color(
+                /*var drawColor = new Color(
                     (byte)(area0 * v0.Color.R + area1 * v1.Color.R + area2 * v2.Color.R),
                     (byte)(area0 * v0.Color.G + area1 * v1.Color.G + area2 * v2.Color.G),
                     (byte)(area0 * v0.Color.B + area1 * v1.Color.B + area2 * v2.Color.B),
-                    (byte)(area0 * v0.Color.A + area1 * v1.Color.A + area2 * v2.Color.A));
+                    (byte)(area0 * v0.Color.A + area1 * v1.Color.A + area2 * v2.Color.A));*/
+                var uv = v0.UV * area0 + v1.UV * area1 + v2.UV * area2;
+                var drawColor = texture.SampleNearest(uv);
                 frameBuffer.SetPixel(x, y, drawColor);    
             }
         }

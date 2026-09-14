@@ -6,4 +6,5 @@ namespace SoftwareRendering;
 public struct ClipVertex {
     public Vector4 Pos;
     public Color Color;
+    public Vector2 UV;
 }

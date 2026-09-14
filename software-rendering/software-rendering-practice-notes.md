@@ -7,32 +7,38 @@
 
 讨论方式：用户已理解基本空间概念，按标准渲染管线和数学约定讨论，不反复安排初级坐标换算练习。用户明确索要代码时可以给出对应代码；其余情况由用户实现，助手解释和审查。
 
-## 当前交接进度（2026-09-10）
+## 当前交接进度（2026-09-14）
 
-**完整的六平面齐次视锥裁剪已接入渲染管线，项目构建通过。** `Program.DrawModel` 现在先将投影结果保存为含 `(x, y, z, w)` 的 `ClipVertex`，再对每个索引三角形依次执行左、右、下、上、近、远六个平面的裁剪；裁剪后的凸多边形会扇形三角化，再进行透视除法、视口变换并提交给原有 `Rasterizer.DrawTriangle`。尚未完成运行画面的专项验证。
+**完整的六平面齐次视锥裁剪、FBX UV 导入与最近邻纹理采样均已接入渲染管线，并已完成运行验证。** `Program.DrawModel` 先将投影结果保存为含 `(x, y, z, w)` 与 `UV` 的 `ClipVertex`，再对每个索引三角形依次执行左、右、下、上、近、远六个平面的裁剪；裁剪后的凸多边形会扇形三角化，再进行透视除法、视口变换并提交给 `Rasterizer.DrawTriangle`。光栅化阶段以重心坐标插值得到当前像素的 UV，再从纹理中采样颜色。
 
 ### 已完成的代码与资源
 
 - 安装 `AssimpNetter 6.0.5`，项目目标为 .NET 10；当前项目编译通过，`box.fbx` 已完成实际显示验证。
 - 测试模型：`Assets/Models/box.fbx`，来自 Assimp 官方测试集，17,200 字节；来源说明及许可证在同目录。
-- 自定义 `Mesh`：`Vertex[] Vertices`、`int[] Indices`。
+- UV 测试模型：`Assets/Models/duck.fbx`，配套纹理为 `Assets/Textures/duckCM.png`。原始贴图为 24 位 TGA，当前 Raylib 解码器无法读取，已在不改变像素内容的前提下转为 PNG；两者都在构建时复制到输出目录。
+- 自定义 `Mesh`：`Vertex[] Vertices`、`int[] Indices`；`Vertex` 包含模型/屏幕位置、颜色与 `Vector2 UV`。
 - 自定义 `Model`：`Mesh[] Meshes`、`Matrix4x4 Transform`，默认单位矩阵。
 - `Program.LoadModel` 在渲染循环前加载一次，使用 `Triangulate | PreTransformVertices`，再调用 `ConvertToMesh` 复制位置和索引，颜色统一为白色。
 - `PreTransformVertices` 已将文件内部节点变换烘焙进顶点，因此它们不再是各原始网格独立的局部坐标，而可作为整个导入模型的坐标使用。当前路线只针对静态模型，之后另加 `Model.Transform` 将整体放到世界空间。
-- `DrawModel` 当前相机位置初始为 `(0, 0, -1)`、目标为原点、上方向为 `+Y`；垂直 FOV 为 60°，近远裁剪距离为 0.1、100，窗口为 800×600；尚未单独定义 Camera 类。
+- `DrawModel` 当前相机位置为 `(0, 0, -3)`、目标为原点、上方向为 `+Y`；垂直 FOV 为 45°，近远裁剪距离为 0.1、100，窗口为 800×600；尚未单独定义 Camera 类。鸭子的源坐标较大，渲染前以 `0.01` 缩放并向下平移 `0.5`，使其中心接近原点。
 - 已实现 `mvp = model.Transform * view * projection`，通过 `Vector4.Transform` 得到裁剪空间位置。该位置先保存在 `ClipVertex.Pos`，保留 `w`；只有完成裁剪后才对 xyz 除以 w 得到 NDC，并映射为屏幕空间 `Vertex`。
-- 已实现完整齐次视锥裁剪：`ClipTriangleAgainstFrustum` 使用 Sutherland-Hodgman 算法，依次处理左、右、下、上、近、远六个平面。`ClipPolygonAgainstPlane` 按边处理内外关系；跨越平面时，以 `t = distanceA / (distanceA - distanceB)` 求交点，位置和颜色均在裁剪空间中按同一 `t` 插值。输出为 0 个或至少 3 个顶点的凸多边形，再通过扇形三角化提交。
+- 已实现完整齐次视锥裁剪：`ClipTriangleAgainstFrustum` 使用 Sutherland-Hodgman 算法，依次处理左、右、下、上、近、远六个平面。`ClipPolygonAgainstPlane` 按边处理内外关系；跨越平面时，以 `t = distanceA / (distanceA - distanceB)` 求交点，位置、颜色和 UV 均在裁剪空间中按同一 `t` 插值。输出为 0 个或至少 3 个顶点的凸多边形，再通过扇形三角化提交。
 - `box.fbx` 作为项目资源在构建时复制到输出目录，加载路径基于 `AppContext.BaseDirectory`，不再依赖机器特定绝对路径或启动工作目录。
+- `ConvertToMesh` 使用 `HasTextureCoords(0)` 检查 Assimp UV0；从 `TextureCoordinateChannels[0][i]` 读取 `(u, v)` 并写入 `Vertex.UV`。`duck.fbx` 的验证结果为 `UV0: True, 顶点数: 8500, UV 数量: 8500`。
+- `Texture.Load` 将 PNG 解码后的像素复制进 CPU 端 `Color[]`。`SampleNearest` 对 UV 采用 Clamp，翻转 V 以协调图像行方向，并按最近邻纹素返回颜色。
+- `Rasterizer.DrawTriangle` 当前以屏幕空间重心坐标插值 UV：`uv = λ0 UV0 + λ1 UV1 + λ2 UV2`，再用该 UV 调用 `texture.SampleNearest(uv)` 写入帧缓冲。
 
 ### 已知限制与待处理项
 
 - 六个标准齐次裁剪面均已实现：`x >= -w`、`x <= w`、`y >= -w`、`y <= w`、`z >= 0`、`z <= w`。
-- 齐次裁剪实现已通过构建验证，但尚未专门运行并观察模型穿越各视锥平面的画面行为。
+- 齐次裁剪已完成构建与六平面专项运行验证。
 - 光栅化包围盒已与屏幕范围取交集；这只能保护像素缓冲访问，不能替代齐次裁剪。
 - `ConvertToMesh` 的越界索引已改为抛出 `InvalidDataException`。
 - `LoadModel` 尚未检查空场景或无网格的返回情况。
 - 保持现有“屏幕顺时针为正面”的规则，但导入模型的外表面绕序需要实际核对。
-- 当前模型以白色纯色填充绘制，尚未实现线框叠加、纹理或光照；相邻面之间没有自然的明暗边界。
+- 当前只支持手动指定的一张纹理，尚未读取 FBX 材质并自动寻找纹理。
+- 当前使用最近邻采样与 Clamp 寻址；尚未实现双线性过滤、Repeat 寻址、MipMap 或光照。
+- 当前 UV 是屏幕空间线性插值；透视正确插值尚未实现。
 
 ### 本轮概念与问答总结
 
@@ -87,8 +93,9 @@
 
 ### 6. 纹理与插值
 
-- [ ] 给顶点加入 UV，读取一张纹理。
-- [ ] 实现纹理采样：先最近邻，再双线性过滤。
+- [x] 给顶点加入 UV，读取一张纹理。
+- [x] 实现纹理最近邻采样。
+- [ ] 实现双线性过滤，并对比它与最近邻的效果。
 - [ ] 实现透视正确插值，比较它与线性插值在倾斜纹理上的差异。
 
 ### 7. 复盘
@@ -98,6 +105,43 @@
 - [ ] 为每个里程碑保留一张截图或输出图。
 
 ## 涉及知识
+
+### UV、纹理采样与当前插值方式（2026-09-14）
+
+**纹理图**保存的是颜色像素；**UV** 保存的是模型表面应到纹理图何处取色的二维坐标。UV 通常位于 `[0, 1] × [0, 1]`，但其意义由寻址方式决定。当前 `SampleNearest` 使用 Clamp，因此超出范围的坐标会固定在纹理边缘。
+
+当前数据流为：
+
+```text
+duck.fbx 的 UV0
+→ Assimp.TextureCoordinateChannels[0]
+→ Vertex.UV
+→ ClipVertex.UV
+→ 裁剪产生的新顶点以同一 t 插值 UV
+→ 屏幕 Vertex.UV
+→ 重心坐标插值得到像素 UV
+→ Texture.SampleNearest(uv)
+→ FrameBuffer 像素颜色
+```
+
+- 位置会经过 `MVP` 变换；UV 不参与模型、观察或投影变换，只作为顶点属性随顶点流动。
+- 透视除法后，`ToScreenVertex` 当前仍原样传递 UV。
+- 光栅化时令 `λ0、λ1、λ2` 为当前像素相对于屏幕三角形的重心坐标，当前实现为屏幕空间线性插值：
+
+```text
+UV_linear = λ0 UV0 + λ1 UV1 + λ2 UV2
+```
+
+- 这种方式在表面近似正对相机时足够自然；当三角形的三个顶点到相机距离差异很大时，纹理会出现不符合透视的拉伸。
+- 之后实现透视正确插值时，需要保留每个顶点透视除法前的 `W`，并计算：
+
+```text
+UV_perspective =
+  [λ0 (UV0 / W0) + λ1 (UV1 / W1) + λ2 (UV2 / W2)]
+  / [λ0 (1 / W0) + λ1 (1 / W1) + λ2 (1 / W2)]
+```
+
+裁剪阶段不需要为此改写：它仍应在裁剪空间对位置和原始 UV 按同一 `t` 插值。透视正确处理发生在裁剪完成、屏幕三角形光栅化时。
 
 ### 像素中心采样
 

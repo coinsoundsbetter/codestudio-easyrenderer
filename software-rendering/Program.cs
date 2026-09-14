@@ -29,9 +29,18 @@ internal static class Program
             AppContext.BaseDirectory,
             "Assets",
             "Models",
-            "box.fbx");
+            "duck.fbx");
         var model = LoadModel(modelPath);
 
+        var texturePath = Path.Combine(
+            AppContext.BaseDirectory,
+            "Assets",
+            "Textures",
+            "duckCM.png");
+        var texture = Texture.Load(texturePath);
+
+        // duck.fbx 的原始坐标约有数十个单位，先缩小并把它的中心移到原点附近。
+        const float modelScale = 0.01f;
         var modelZ = 0f;
         const float modelMoveSpeed = 1f;
 
@@ -45,14 +54,16 @@ internal static class Program
                 modelZ += modelMoveSpeed * delta;
             }
 
-            model.Transform = Matrix4x4.CreateTranslation(1f, 0f, modelZ);
+            model.Transform =
+                Matrix4x4.CreateScale(modelScale) *
+                Matrix4x4.CreateTranslation(0f, -0.5f, modelZ);
             
             Raylib.BeginDrawing();
 
             frameBuffer.Clear(Color.Black);
             depthBuffer.Clear(float.MaxValue);
             
-            DrawModel(frameBuffer, depthBuffer, model, width, height);
+            DrawModel(frameBuffer, depthBuffer, model, texture, width, height);
 
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
@@ -67,17 +78,17 @@ internal static class Program
         Raylib.CloseWindow();
     }
 
-    private static void DrawModel(FrameBuffer frameBuffer, DepthBuffer depthBuffer, Model model, int screenWidth, int screenHeight) {
+    private static void DrawModel(FrameBuffer frameBuffer, DepthBuffer depthBuffer, Model model, Texture texture, int screenWidth, int screenHeight) {
         //模型空间
         /*var m = Matrix4x4.Identity;
         model.Transform = Matrix4x4.CreateTranslation(1f, 0f, 0f);*/
         //观察空间
-        var cameraPos = new Vector3(0, 0, -1f);
+        var cameraPos = new Vector3(0, 0, -3f);
         var cameraTarget = Vector3.Zero;
         var cameraUp = Vector3.UnitY;
         var view = Matrix4x4.CreateLookAt(cameraPos, cameraTarget, cameraUp);
         //透视投影
-        var fov = MathF.PI / 3f; //60°
+        var fov = MathF.PI / 4f; //45°
         var aspectRatio = (float)screenWidth / screenHeight;
         var nearPlane = 0.1f;
         var farPlane = 100f;
@@ -94,6 +105,7 @@ internal static class Program
                         new Vector4(vertex.X, vertex.Y, vertex.Z, 1f),
                         mvp),
                     Color = vertex.Color,
+                    UV = vertex.UV,
                 };
             }
             for (int j = 0; j < mesh.Indices.Length; j+=3) {
@@ -117,7 +129,7 @@ internal static class Program
                         V1 = ToScreenVertex(clippedVertices[k], screenWidth, screenHeight),
                         V2 = ToScreenVertex(clippedVertices[k+1], screenWidth, screenHeight),
                     };
-                    Rasterizer.DrawTriangle(frameBuffer, depthBuffer, triangle);
+                    Rasterizer.DrawTriangle(frameBuffer, depthBuffer, triangle, texture);
                 }
                 
             }
@@ -137,11 +149,15 @@ internal static class Program
             PostProcessSteps.PreTransformVertices
         );
 
-        var meshes = new Mesh[scene.MeshCount];
+        /*var meshes = new Mesh[scene.MeshCount];
 
         for (int i = 0; i < scene.MeshCount; i++) {
             meshes[i] = ConvertToMesh(scene.Meshes[i]);
-        }
+        }*/
+        
+        var meshes = new[] {
+            ConvertToMesh(scene.Meshes[0]),
+        };
 
         return new Model {
             Meshes = meshes,
@@ -151,13 +167,24 @@ internal static class Program
 
     private static Mesh ConvertToMesh(Assimp.Mesh source) {
         var vertices = new Vertex[source.VertexCount];
+        var hasUv0 = source.HasTextureCoords(0);
+        Console.WriteLine(
+            $"UV0: {hasUv0}, 顶点数: {source.VertexCount}, " +
+            $"UV 数量: {source.TextureCoordinateChannels[0]?.Count ?? 0}");
+        
         for (int i = 0; i < source.VertexCount; i++) {
             var position = source.Vertices[i];
+            var uv = hasUv0
+                ? new Vector2(
+                    source.TextureCoordinateChannels[0][i].X,
+                    source.TextureCoordinateChannels[0][i].Y)
+                : Vector2.Zero;
             vertices[i] = new Vertex() {
                 X = position.X,
                 Y = position.Y,
                 Z = position.Z,
                 Color = Color.White,
+                UV = uv,
             };
         }
 
@@ -194,6 +221,7 @@ internal static class Program
             Y = (1f - ndc.Y) * 0.5f * screenHeight,
             Z = ndc.Z,
             Color = clipVertex.Color,
+            UV = clipVertex.UV,
         };
     }
 
@@ -261,6 +289,7 @@ internal static class Program
         var t = distanceA / (distanceA - distanceB);
 
         return new ClipVertex {
+            UV = Vector2.Lerp(a.UV, b.UV, t),
             Pos = Vector4.Lerp(a.Pos, b.Pos, t),
             Color = new Color(
                 (byte)(a.Color.R + (b.Color.R - a.Color.R) * t),

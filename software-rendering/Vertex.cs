@@ -1,4 +1,5 @@
-﻿using Raylib_cs;
+﻿using System.Numerics;
+using Raylib_cs;
 
 namespace SoftwareRendering;
 
@@ -7,4 +8,5 @@ public struct Vertex {
     public float Y;
     public float Z;
     public Color Color;
+    public Vector2 UV;
 }

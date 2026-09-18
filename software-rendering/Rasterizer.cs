@@ -66,6 +66,7 @@ public class Rasterizer {
                     (byte)(area0 * v0.Color.G + area1 * v1.Color.G + area2 * v2.Color.G),
                     (byte)(area0 * v0.Color.B + area1 * v1.Color.B + area2 * v2.Color.B),
                     (byte)(area0 * v0.Color.A + area1 * v1.Color.A + area2 * v2.Color.A));*/
+                // 故意使用屏幕空间线性插值，作为透视正确插值的对比基线。
                 var uv = v0.UV * area0 + v1.UV * area1 + v2.UV * area2;
                 var drawColor = texture.SampleNearest(uv);
                 frameBuffer.SetPixel(x, y, drawColor);    

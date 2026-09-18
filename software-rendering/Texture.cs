@@ -35,6 +35,26 @@ public class Texture {
         return new Texture(image.Width, image.Height, pixels);
     }
 
+    // 用于观察纹理坐标插值；相邻格使用足够高的对比度，便于看出拉伸。
+    public static Texture CreateCheckerboard(int size, int cellsPerAxis) {
+        if (size <= 0 || cellsPerAxis <= 0 || size % cellsPerAxis != 0) {
+            throw new ArgumentOutOfRangeException();
+        }
+
+        var pixels = new Color[size * size];
+        var cellSize = size / cellsPerAxis;
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+                var cellX = x / cellSize;
+                var cellY = y / cellSize;
+                var isLight = (cellX + cellY) % 2 == 0;
+                pixels[y * size + x] = isLight ? Color.RayWhite : Color.DarkBlue;
+            }
+        }
+
+        return new Texture(size, size, pixels);
+    }
+
     public Color SampleNearest(Vector2 uv) {
         //采样方式默认使用Clamp,超出[0, 1]的uv固定在纹理边缘
         var u = Math.Clamp(uv.X, 0f, 1f);

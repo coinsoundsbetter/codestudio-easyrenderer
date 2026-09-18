@@ -19,51 +19,47 @@ internal static class Program
     private static void Main() {
         var width = 800;
         var height = 600;
-        Raylib.InitWindow(width, height, "Software Rendering");
+        Raylib.InitWindow(width, height, "Perspective UV Interpolation Test");
         Raylib.SetTargetFPS(60);
 
         var frameBuffer = new FrameBuffer(width, height);
         var depthBuffer = new DepthBuffer(width, height);
 
-        var modelPath = Path.Combine(
-            AppContext.BaseDirectory,
-            "Assets",
-            "Models",
-            "duck.fbx");
-        var model = LoadModel(modelPath);
-
-        var texturePath = Path.Combine(
-            AppContext.BaseDirectory,
-            "Assets",
-            "Textures",
-            "duckCM.png");
-        var texture = Texture.Load(texturePath);
-
-        // duck.fbx 的原始坐标约有数十个单位，先缩小并把它的中心移到原点附近。
-        const float modelScale = 0.01f;
-        var modelZ = 0f;
-        const float modelMoveSpeed = 1f;
+        // 近边距离相机约 2.5 个单位，远边约 20 个单位。
+        // 这使同一张棋盘纹理在屏幕上形成明显梯形，用来观察当前的屏幕空间线性 UV 插值误差。
+        var model = CreatePerspectiveUvTestModel();
+        var texture = Texture.CreateCheckerboard(240, 12);
+        var cameraPosition = new Vector3(0f, 0f, -3f);
+        var cameraYaw = 0f;
+        var cameraPitch = 0f;
+        const float cameraMoveSpeed = 3f;
+        const float cameraTurnSpeed = 1.5f;
 
         while (!Raylib.WindowShouldClose()) {
+            var deltaTime = Raylib.GetFrameTime();
+            UpdateCamera(
+                ref cameraPosition,
+                ref cameraYaw,
+                ref cameraPitch,
+                deltaTime,
+                cameraMoveSpeed,
+                cameraTurnSpeed);
+            var cameraForward = GetCameraForward(cameraYaw, cameraPitch);
 
-            var delta = Raylib.GetFrameTime();
-            if (Raylib.IsKeyDown(KeyboardKey.S)) {
-                modelZ -= modelMoveSpeed * delta;
-            }
-            if (Raylib.IsKeyDown(KeyboardKey.W)) {
-                modelZ += modelMoveSpeed * delta;
-            }
-
-            model.Transform =
-                Matrix4x4.CreateScale(modelScale) *
-                Matrix4x4.CreateTranslation(0f, -0.5f, modelZ);
-            
             Raylib.BeginDrawing();
 
             frameBuffer.Clear(Color.Black);
             depthBuffer.Clear(float.MaxValue);
             
-            DrawModel(frameBuffer, depthBuffer, model, texture, width, height);
+            DrawModel(
+                frameBuffer,
+                depthBuffer,
+                model,
+                texture,
+                width,
+                height,
+                cameraPosition,
+                cameraForward);
 
             for (int y = 0; y < height; y++) {
                 for (int x = 0; x < width; x++) {
@@ -72,19 +68,94 @@ internal static class Program
                 }
             }
 
+            Raylib.DrawText(
+                "W/S: forward/back   A/D: strafe   Q/E: up/down   Arrow keys: look",
+                12,
+                12,
+                18,
+                Color.Yellow);
+
             Raylib.EndDrawing();
         }
 
         Raylib.CloseWindow();
     }
 
-    private static void DrawModel(FrameBuffer frameBuffer, DepthBuffer depthBuffer, Model model, Texture texture, int screenWidth, int screenHeight) {
+    private static void UpdateCamera(
+        ref Vector3 position,
+        ref float yaw,
+        ref float pitch,
+        float deltaTime,
+        float moveSpeed,
+        float turnSpeed) {
+        if (Raylib.IsKeyDown(KeyboardKey.Left)) yaw -= turnSpeed * deltaTime;
+        if (Raylib.IsKeyDown(KeyboardKey.Right)) yaw += turnSpeed * deltaTime;
+        if (Raylib.IsKeyDown(KeyboardKey.Up)) pitch += turnSpeed * deltaTime;
+        if (Raylib.IsKeyDown(KeyboardKey.Down)) pitch -= turnSpeed * deltaTime;
+        pitch = Math.Clamp(pitch, -1.4f, 1.4f);
+
+        var forward = GetCameraForward(yaw, pitch);
+        var right = Vector3.Normalize(Vector3.Cross(Vector3.UnitY, forward));
+        var move = Vector3.Zero;
+        if (Raylib.IsKeyDown(KeyboardKey.W)) move += forward;
+        if (Raylib.IsKeyDown(KeyboardKey.S)) move -= forward;
+        if (Raylib.IsKeyDown(KeyboardKey.D)) move += right;
+        if (Raylib.IsKeyDown(KeyboardKey.A)) move -= right;
+        if (Raylib.IsKeyDown(KeyboardKey.E)) move += Vector3.UnitY;
+        if (Raylib.IsKeyDown(KeyboardKey.Q)) move -= Vector3.UnitY;
+
+        if (move != Vector3.Zero) {
+            position += Vector3.Normalize(move) * moveSpeed * deltaTime;
+        }
+    }
+
+    // yaw = 0 时相机朝世界空间 +Z，与初始相机位置 (0, 0, -3) 对应。
+    private static Vector3 GetCameraForward(float yaw, float pitch) {
+        var cosPitch = MathF.Cos(pitch);
+        return Vector3.Normalize(new Vector3(
+            MathF.Sin(yaw) * cosPitch,
+            MathF.Sin(pitch),
+            MathF.Cos(yaw) * cosPitch));
+    }
+
+    // 一个由两个顺时针三角形组成的倾斜四边形。
+    // 近边为 y = -1.0, z = -0.5；远边为 y = 1.3, z = 17。
+    // UV 覆盖整张棋盘，让错误的仿射（屏幕空间线性）插值更容易看出。
+    private static Model CreatePerspectiveUvTestModel() {
+        var vertices = new[] {
+            new Vertex { X = -1.2f, Y = -1.0f, Z = -0.5f, Color = Color.White, UV = new Vector2(0f, 0f) },
+            new Vertex { X =  1.2f, Y = -1.0f, Z = -0.5f, Color = Color.White, UV = new Vector2(1f, 0f) },
+            new Vertex { X =  1.2f, Y =  1.3f, Z = 17f, Color = Color.White, UV = new Vector2(1f, 1f) },
+            new Vertex { X = -1.2f, Y =  1.3f, Z = 17f, Color = Color.White, UV = new Vector2(0f, 1f) },
+        };
+
+        return new Model {
+            Meshes = new[] {
+                new Mesh {
+                    Vertices = vertices,
+                    // 当前 LookAt 的相机左右方向会使模型 x 映射到屏幕时镜像；
+                    // 此顺序投影后仍是项目约定的屏幕顺时针正面。
+                    Indices = new[] { 0, 1, 2, 0, 2, 3 },
+                },
+            },
+            Transform = Matrix4x4.Identity,
+        };
+    }
+
+    private static void DrawModel(
+        FrameBuffer frameBuffer,
+        DepthBuffer depthBuffer,
+        Model model,
+        Texture texture,
+        int screenWidth,
+        int screenHeight,
+        Vector3 cameraPos,
+        Vector3 cameraForward) {
         //模型空间
         /*var m = Matrix4x4.Identity;
         model.Transform = Matrix4x4.CreateTranslation(1f, 0f, 0f);*/
         //观察空间
-        var cameraPos = new Vector3(0, 0, -3f);
-        var cameraTarget = Vector3.Zero;
+        var cameraTarget = cameraPos + cameraForward;
         var cameraUp = Vector3.UnitY;
         var view = Matrix4x4.CreateLookAt(cameraPos, cameraTarget, cameraUp);
         //透视投影
@@ -222,6 +293,7 @@ internal static class Program
             Z = ndc.Z,
             Color = clipVertex.Color,
             UV = clipVertex.UV,
+            InvW = 1f / clipPos.W,
         };
     }
 

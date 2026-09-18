@@ -222,6 +222,7 @@ internal static class Program
             Z = ndc.Z,
             Color = clipVertex.Color,
             UV = clipVertex.UV,
+            InvW = 1f / clipPos.W,
         };
     }
 

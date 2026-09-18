@@ -9,4 +9,5 @@ public struct Vertex {
     public float Z;
     public Color Color;
     public Vector2 UV;
+    public float InvW;
 }

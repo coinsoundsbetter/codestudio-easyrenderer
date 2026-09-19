@@ -65,8 +65,11 @@ public class Texture {
         var y0 = (int)y;
         var x1 = x0 + 1;
         var y1 = y0 + 1;
-        var sampleX1 = Math.Min(x1, Width - 1);
-        var sampleY1 = Math.Min(y1, Height - 1);
+        /*var sampleX1 = Math.Min(x1, Width - 1);
+        var sampleY1 = Math.Min(y1, Height - 1);*/
+        //Repeat
+        var sampleX1 = x1 % Width;
+        var sampleY1 = y1 % Height;
         var dx0 = x - x0; //这个值表示靠右侧权重
         var dy0 = y - y0; //这个值表示靠下侧权重
         var dx1 = x1 - x; //这个值表示靠左侧权重

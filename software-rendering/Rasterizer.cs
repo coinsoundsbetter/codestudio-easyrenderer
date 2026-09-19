@@ -1,4 +1,5 @@
-﻿using Raylib_cs;
+﻿using System.Numerics;
+using Raylib_cs;
 
 namespace SoftwareRendering;
 
@@ -66,17 +67,49 @@ public class Rasterizer {
                     (byte)(area0 * v0.Color.G + area1 * v1.Color.G + area2 * v2.Color.G),
                     (byte)(area0 * v0.Color.B + area1 * v1.Color.B + area2 * v2.Color.B),
                     (byte)(area0 * v0.Color.A + area1 * v1.Color.A + area2 * v2.Color.A));*/
-                var invW = area0 * v0.InvW
-                           + area1 * v1.InvW
-                           + area2 * v2.InvW;
-                var uv = (
-                    v0.UV * (area0 * v0.InvW) +
-                    v1.UV * (area1 * v1.InvW) +
-                    v2.UV * (area2 * v2.InvW)
-                    ) / invW;
-                var drawColor = texture.SampleBilinear(uv, 2);
+                var uv = GetPerspectiveCorrectUv(v0, v1, v2, area, px, py);
+                var uvRight = GetPerspectiveCorrectUv(v0, v1, v2, area, px + 1f, py);
+                var uvDown = GetPerspectiveCorrectUv(v0, v1, v2, area, px, py + 1f);
+
+                // 估计当前一个屏幕像素在纹理中跨越了多少纹素。
+                var dUvDx = uvRight - uv;
+                var dUvDy = uvDown - uv;
+                var dxInTexels = new Vector2(
+                    dUvDx.X * texture.Width,
+                    dUvDx.Y * texture.Height);
+                var dyInTexels = new Vector2(
+                    dUvDy.X * texture.Width,
+                    dUvDy.Y * texture.Height);
+
+                var rho = MathF.Max(dxInTexels.Length(), dyInTexels.Length());
+                var lod = MathF.Log2(MathF.Max(rho, 1f));
+                lod = Math.Clamp(lod, 0f, texture.MipLevels - 1);
+
+                // 先选取整数层；下一步的三线性过滤会利用 lod 的小数部分。
+                var mipLevel = (int)MathF.Floor(lod);
+                var drawColor = texture.SampleBilinear(uv, mipLevel);
                 frameBuffer.SetPixel(x, y, drawColor);    
             }
         }
+    }
+    
+    private static Vector2 GetPerspectiveCorrectUv(
+        Vertex v0, Vertex v1, Vertex v2,
+        float area,
+        float px, float py) {
+
+        var weight0 = Utils.Edge(v1, v2, px, py) / area;
+        var weight1 = Utils.Edge(v2, v0, px, py) / area;
+        var weight2 = Utils.Edge(v0, v1, px, py) / area;
+
+        var invW = weight0 * v0.InvW
+                   + weight1 * v1.InvW
+                   + weight2 * v2.InvW;
+
+        return (
+            v0.UV * (weight0 * v0.InvW) +
+            v1.UV * (weight1 * v1.InvW) +
+            v2.UV * (weight2 * v2.InvW)
+            ) / invW;
     }
 }

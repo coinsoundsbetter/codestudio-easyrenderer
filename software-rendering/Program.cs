@@ -25,23 +25,12 @@ internal static class Program
         var frameBuffer = new FrameBuffer(width, height);
         var depthBuffer = new DepthBuffer(width, height);
 
-        var modelPath = Path.Combine(
-            AppContext.BaseDirectory,
-            "Assets",
-            "Models",
-            "duck.fbx");
-        var model = LoadModel(modelPath);
-
-        var texturePath = Path.Combine(
-            AppContext.BaseDirectory,
-            "Assets",
-            "Textures",
-            "duckCM.png");
-        var texture = Texture.Load(texturePath);
+        // LOD 测试场景：U 沿屏幕横向，V 沿远离相机的方向。
+        // 高频竖条纹可看出纵深方向的高 LOD 也会模糊横向细节。
+        var model = CreateLodTestPlane();
+        var texture = Texture.CreateVerticalStripeTexture(512, 512, 16);
         texture.GenerateMipMaps();
 
-        // duck.fbx 的原始坐标约有数十个单位，先缩小并把它的中心移到原点附近。
-        const float modelScale = 0.01f;
         var modelZ = 0f;
         const float modelMoveSpeed = 1f;
 
@@ -55,9 +44,7 @@ internal static class Program
                 modelZ += modelMoveSpeed * delta;
             }
 
-            model.Transform =
-                Matrix4x4.CreateScale(modelScale) *
-                Matrix4x4.CreateTranslation(0f, -0.5f, modelZ);
+            model.Transform = Matrix4x4.CreateTranslation(0f, 0f, modelZ);
             
             Raylib.BeginDrawing();
 
@@ -77,6 +64,27 @@ internal static class Program
         }
 
         Raylib.CloseWindow();
+    }
+
+    private static Model CreateLodTestPlane() {
+        // 近边 z=0，远边 z=18；UV 的 U 在横向重复 4 次。
+        // 索引顺序遵循本项目“屏幕顺时针为正面”的约定。
+        var vertices = new[] {
+            new Vertex { X = -1.5f, Y = -1.0f, Z = 0f,  Color = Color.White, UV = new Vector2(0f, 0f) },
+            new Vertex { X =  1.5f, Y = -1.0f, Z = 0f,  Color = Color.White, UV = new Vector2(4f, 0f) },
+            new Vertex { X =  1.5f, Y =  1.0f, Z = 18f, Color = Color.White, UV = new Vector2(4f, 1f) },
+            new Vertex { X = -1.5f, Y =  1.0f, Z = 18f, Color = Color.White, UV = new Vector2(0f, 1f) },
+        };
+
+        return new Model {
+            Meshes = new[] {
+                new Mesh {
+                    Vertices = vertices,
+                    Indices = new[] { 0, 1, 2, 0, 2, 3 },
+                },
+            },
+            Transform = Matrix4x4.Identity,
+        };
     }
 
     private static void DrawModel(FrameBuffer frameBuffer, DepthBuffer depthBuffer, Model model, Texture texture, int screenWidth, int screenHeight) {

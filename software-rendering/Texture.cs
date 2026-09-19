@@ -10,6 +10,7 @@ public class Texture {
     private readonly Color[] m_Pixels;
     
     private List<MipLevel> m_MipLevels;
+    public int MipLevels => m_MipLevels.Count;
     
     private Texture(int width, int height, Color[] mPixels) {
         Width = width;
@@ -38,6 +39,22 @@ public class Texture {
         }
         
         return new Texture(image.Width, image.Height, pixels);
+    }
+
+    public static Texture CreateVerticalStripeTexture(int width, int height, int stripeWidth) {
+        if (width <= 0 || height <= 0 || stripeWidth <= 0) {
+            throw new ArgumentOutOfRangeException();
+        }
+
+        var pixels = new Color[width * height];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                var isWhite = (x / stripeWidth) % 2 == 0;
+                pixels[y * width + x] = isWhite ? Color.White : Color.Black;
+            }
+        }
+
+        return new Texture(width, height, pixels);
     }
 
     public void GenerateMipMaps() {

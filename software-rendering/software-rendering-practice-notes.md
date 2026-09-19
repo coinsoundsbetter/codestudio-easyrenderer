@@ -25,8 +25,9 @@
 - 已实现完整齐次视锥裁剪：`ClipTriangleAgainstFrustum` 使用 Sutherland-Hodgman 算法，依次处理左、右、下、上、近、远六个平面。`ClipPolygonAgainstPlane` 按边处理内外关系；跨越平面时，以 `t = distanceA / (distanceA - distanceB)` 求交点，位置、颜色和 UV 均在裁剪空间中按同一 `t` 插值。输出为 0 个或至少 3 个顶点的凸多边形，再通过扇形三角化提交。
 - `box.fbx` 作为项目资源在构建时复制到输出目录，加载路径基于 `AppContext.BaseDirectory`，不再依赖机器特定绝对路径或启动工作目录。
 - `ConvertToMesh` 使用 `HasTextureCoords(0)` 检查 Assimp UV0；从 `TextureCoordinateChannels[0][i]` 读取 `(u, v)` 并写入 `Vertex.UV`。`duck.fbx` 的验证结果为 `UV0: True, 顶点数: 8500, UV 数量: 8500`。
-- `Texture.Load` 将 PNG 解码后的像素复制进 CPU 端 `Color[]`。`SampleNearest` 对 UV 采用 Clamp，翻转 V 以协调图像行方向，并按最近邻纹素返回颜色。
-- `Rasterizer.DrawTriangle` 当前以屏幕空间重心坐标插值 UV：`uv = λ0 UV0 + λ1 UV1 + λ2 UV2`，再用该 UV 调用 `texture.SampleNearest(uv)` 写入帧缓冲。
+- `Texture.Load` 将 PNG 解码后的像素复制进 CPU 端 `Color[]`。纹理采样对 UV 采用 Clamp，翻转 V 以协调图像行方向；现已支持 `SampleNearest` 与 `SampleBilinear`。
+- `SampleBilinear` 将 UV 映射为连续纹素坐标，读取左上、右上、左下、右下四个纹素，以横纵方向距离的乘积作为权重，逐 RGBA 通道混合。右、下邻居的数组下标会 Clamp 到边缘；用于计算权重的理论相邻坐标保持不变。
+- `Rasterizer.DrawTriangle` 先以透视正确方式插值得到像素 UV，再调用当前选择的纹理采样函数写入帧缓冲。
 
 ### 已知限制与待处理项
 
@@ -37,7 +38,7 @@
 - `LoadModel` 尚未检查空场景或无网格的返回情况。
 - 保持现有“屏幕顺时针为正面”的规则，但导入模型的外表面绕序需要实际核对。
 - 当前只支持手动指定的一张纹理，尚未读取 FBX 材质并自动寻找纹理。
-- 当前使用最近邻采样与 Clamp 寻址；尚未实现双线性过滤、Repeat 寻址、MipMap 或光照。
+- 当前支持最近邻和双线性采样与 Clamp 寻址；尚未实现 Repeat 寻址、MipMap 或光照。
 - 已实现透视正确 UV 插值：屏幕顶点保存 `InvW = 1 / clip.W`，光栅化时使用 `UV/W` 与 `1/W` 重建像素 UV。
 
 ### 本轮概念与问答总结
@@ -96,7 +97,7 @@
 
 - [x] 给顶点加入 UV，读取一张纹理。
 - [x] 实现纹理最近邻采样。
-- [ ] 实现双线性过滤，并对比它与最近邻的效果。
+- [x] 实现双线性过滤，并对比它与最近邻的效果。
 - [x] 实现透视正确插值，并通过倾斜棋盘纹理理解其与屏幕空间线性插值的差异。
 
 ### 7. 复盘
@@ -145,6 +146,56 @@ UV_perspective =
 实现时先计算 `invW = λ0/W0 + λ1/W1 + λ2/W2`，分子为 `λ0 UV0/W0 + λ1 UV1/W1 + λ2 UV2/W2`，最后以分子除以 `invW`。这等价于先以 `1/W` 修正屏幕重心权重、归一化后再组合 UV；因而远端纹理格更密，近端纹理格更大。
 
 裁剪阶段不需要为此改写：它仍应在裁剪空间对位置和原始 UV 按同一 `t` 插值。透视正确处理发生在裁剪完成、屏幕三角形光栅化时。GPU 对普通 UV 插值通常默认做同类校正；显式指定 `noperspective` 才会得到屏幕空间线性插值。
+
+### 双线性过滤（2026-09-19）
+
+`SampleNearest` 会将连续纹素坐标直接取整，因此采样位置跨过最近纹素的分界线时，颜色会突然跳变。`SampleBilinear` 保留连续坐标的小数部分，并混合周围四个纹素，使颜色随 UV 连续变化。
+
+当前先沿用 `SampleNearest` 的 UV Clamp 与 V 翻转，再计算：
+
+```text
+x = u × (Width - 1)
+y = v × (Height - 1)
+x0 = floor(x), y0 = floor(y)
+x1 = x0 + 1, y1 = y0 + 1
+dx0 = x - x0, dx1 = x1 - x
+dy0 = y - y0, dy1 = y1 - y
+```
+
+翻转 V 后使用图像坐标：`y` 越小越靠上。因此四个颜色及其权重为：
+
+```text
+左上 c00(x0, y0)：dx1 × dy1
+右上 c10(x1, y0)：dx0 × dy1
+左下 c01(x0, y1)：dx1 × dy0
+右下 c11(x1, y1)：dx0 × dy0
+```
+
+权重来自两次一维线性插值，而不是额外规定的规则。先沿每一行横向插值：
+
+```text
+top    = c00 × dx1 + c10 × dx0
+bottom = c01 × dx1 + c11 × dx0
+```
+
+再沿纵向插值：
+
+```text
+result = top × dy1 + bottom × dy0
+```
+
+将前两式代入并展开，即得到：
+
+```text
+result = c00 × dx1 × dy1
+       + c10 × dx0 × dy1
+       + c01 × dx1 × dy0
+       + c11 × dx0 × dy0
+```
+
+每个角的权重等于它所在列的横向影响与所在行的纵向影响之积。由于 `dx0 + dx1 = 1`、`dy0 + dy1 = 1`，四个权重之和为 `(dx0 + dx1) × (dy0 + dy1) = 1`，所以结果是颜色的加权平均。对 R、G、B、A 分别作加权和后，结果必须以 `byte` 通道构造 `Color`。直接将 `0–255` 范围的插值结果传给浮点 `Color` 构造函数，会被当作 `0–1` 的归一化颜色，导致高亮通道饱和、橙色等细节错误地趋向纯黄。
+
+在边缘处，`x1/y1` 仍保留为用于计算权重的理论相邻坐标；仅在访问数组时将右、下邻居 Clamp 到最后一列、最后一行。这等价于将边缘纹素向纹理外无限延伸，符合当前 Clamp 寻址约定。与最近邻对比时，双线性结果应更平滑，同时仍保留鸭嘴和阴影等颜色差异。
 
 ### 像素中心采样
 

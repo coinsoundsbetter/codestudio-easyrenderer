@@ -47,4 +47,50 @@ public class Texture {
         var y = (int)MathF.Round(v * (Height - 1));
         return m_Pixels[y * Width + x];
     }
+
+    public Color SampleBilinear(Vector2 uv) {
+        var u = Math.Clamp(uv.X, 0f, 1f);
+        var v = Math.Clamp(uv.Y, 0f, 1f);
+        v = 1f - v;
+
+        var x = u * (Width - 1);
+        var y = v * (Height - 1);
+        //左上角纹素坐标
+        var x0 = (int)x;
+        var y0 = (int)y;
+        var x1 = x0 + 1;
+        var y1 = y0 + 1;
+        var sampleX1 = Math.Min(x1, Width - 1);
+        var sampleY1 = Math.Min(y1, Height - 1);
+        var dx0 = x - x0; //这个值表示靠右侧权重
+        var dy0 = y - y0; //这个值表示靠下侧权重
+        var dx1 = x1 - x; //这个值表示靠左侧权重
+        var dy1 = y1 - y; //这个值表示靠上侧权重
+        //影响权重 = 所在行的影响权重 * 所在列的影响权重
+        var weightLeftTop = dx1 * dy1;
+        var weightRightTop = dx0 * dy1;
+        var weightLeftBottom = dx1 * dy0;
+        var weightRightBottom = dx0 * dy0;
+        var colorLeftTop = m_Pixels[y0 * Width + x0];
+        var colorRightTop = m_Pixels[y0 * Width + sampleX1];
+        var colorLeftBottom = m_Pixels[sampleY1 * Width + x0];
+        var colorRightBottom = m_Pixels[sampleY1 * Width + sampleX1];
+        var colorR = weightLeftTop * colorLeftTop.R +
+                     weightLeftBottom * colorLeftBottom.R +
+                     weightRightTop * colorRightTop.R +
+                     weightRightBottom * colorRightBottom.R;
+        var colorG = weightLeftTop * colorLeftTop.G +
+                     weightLeftBottom * colorLeftBottom.G +
+                     weightRightTop * colorRightTop.G +
+                     weightRightBottom * colorRightBottom.G;
+        var colorB = weightLeftTop * colorLeftTop.B +
+                     weightLeftBottom * colorLeftBottom.B +
+                     weightRightTop * colorRightTop.B +
+                     weightRightBottom * colorRightBottom.B;
+        return new Color(
+            (byte)Math.Clamp(MathF.Round(colorR), 0, 255),
+            (byte)Math.Clamp(MathF.Round(colorG), 0, 255),
+            (byte)Math.Clamp(MathF.Round(colorB), 0, 255),
+            (byte)255);
+    }
 }

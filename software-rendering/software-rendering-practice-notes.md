@@ -9,7 +9,7 @@
 
 ## 当前交接进度（2026-09-14）
 
-**完整的六平面齐次视锥裁剪、FBX UV 导入与最近邻纹理采样均已接入渲染管线，并已完成运行验证。** `Program.DrawModel` 先将投影结果保存为含 `(x, y, z, w)` 与 `UV` 的 `ClipVertex`，再对每个索引三角形依次执行左、右、下、上、近、远六个平面的裁剪；裁剪后的凸多边形会扇形三角化，再进行透视除法、视口变换并提交给 `Rasterizer.DrawTriangle`。光栅化阶段以重心坐标插值得到当前像素的 UV，再从纹理中采样颜色。
+**完整的六平面齐次视锥裁剪、FBX UV 导入、透视正确插值、双线性过滤与基础 MipMap 链均已接入渲染管线，并已完成运行验证。** `Program.DrawModel` 先将投影结果保存为含 `(x, y, z, w)` 与 `UV` 的 `ClipVertex`，再对每个索引三角形依次执行左、右、下、上、近、远六个平面的裁剪；裁剪后的凸多边形会扇形三角化，再进行透视除法、视口变换并提交给 `Rasterizer.DrawTriangle`。光栅化阶段以重心坐标插值得到当前像素的 UV，再从纹理中采样颜色。
 
 ### 已完成的代码与资源
 
@@ -28,6 +28,9 @@
 - `Texture.Load` 将 PNG 解码后的像素复制进 CPU 端 `Color[]`。纹理采样对 UV 采用 Clamp，翻转 V 以协调图像行方向；现已支持 `SampleNearest` 与 `SampleBilinear`。
 - `SampleBilinear` 将 UV 映射为连续纹素坐标，读取左上、右上、左下、右下四个纹素，以横纵方向距离的乘积作为权重，逐 RGBA 通道混合。右、下邻居的数组下标会 Clamp 到边缘；用于计算权重的理论相邻坐标保持不变。
 - `Rasterizer.DrawTriangle` 先以透视正确方式插值得到像素 UV，再调用当前选择的纹理采样函数写入帧缓冲。
+- `Texture` 保存 `List<MipLevel>`；level 0 持有原始纹理，`GenerateMipMaps` 从上一层逐级生成到 `1×1`。每个 `MipLevel` 独立保存该层的宽、高与 `Color[] Pixels`。
+- 新层像素以源层对应 `2×2` 区域的 RGBA 平均色生成。目标 `(x, y)` 映射回源层左上角 `(2x, 2y)`，因此调用为 `Average2X2(source, x * 2, y * 2)`。
+- `SampleNearest` 与 `SampleBilinear` 都可接收手动 `mipmapLevel`，先 Clamp 到有效范围，再完全按对应层的宽、高和像素数组采样。已用 level 0、3 及更高层验证逐级模糊。
 
 ### 已知限制与待处理项
 
@@ -38,7 +41,7 @@
 - `LoadModel` 尚未检查空场景或无网格的返回情况。
 - 保持现有“屏幕顺时针为正面”的规则，但导入模型的外表面绕序需要实际核对。
 - 当前只支持手动指定的一张纹理，尚未读取 FBX 材质并自动寻找纹理。
-- 当前活动渲染路径为 `SampleBilinear`：支持 Repeat 寻址；`SampleNearest` 仍保留 Clamp。尚未实现 MipMap 或光照。
+- 当前活动渲染路径为 `SampleBilinear`：支持 Repeat 寻址；`SampleNearest` 仍保留 Clamp。MipMap 的生成与手动选层已完成；尚未实现自动 LOD、三线性过滤、各向异性过滤或光照。
 - 已实现透视正确 UV 插值：屏幕顶点保存 `InvW = 1 / clip.W`，光栅化时使用 `UV/W` 与 `1/W` 重建像素 UV。
 
 ### 本轮概念与问答总结
@@ -100,6 +103,9 @@
 - [x] 实现双线性过滤，并对比它与最近邻的效果。
 - [x] 实现 Repeat 纹理寻址，并以程序生成的棋盘格验证 UV 超出 `[0, 1]` 后的循环采样。
 - [x] 实现透视正确插值，并通过倾斜棋盘纹理理解其与屏幕空间线性插值的差异。
+- [x] 生成完整 MipMap 链，并以手动指定不同层级验证逐级模糊。
+- [ ] 根据屏幕空间 UV 变化率自动计算 LOD。
+- [ ] 混合相邻 Mip 层，实现三线性过滤（trilinear filtering）。
 
 ### 7. 复盘
 

@@ -38,6 +38,7 @@ internal static class Program
             "Textures",
             "duckCM.png");
         var texture = Texture.Load(texturePath);
+        texture.GenerateMipMaps();
 
         // duck.fbx 的原始坐标约有数十个单位，先缩小并把它的中心移到原点附近。
         const float modelScale = 0.01f;

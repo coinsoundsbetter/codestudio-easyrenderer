@@ -74,7 +74,7 @@ public class Rasterizer {
                     v1.UV * (area1 * v1.InvW) +
                     v2.UV * (area2 * v2.InvW)
                     ) / invW;
-                var drawColor = texture.SampleBilinear(uv);
+                var drawColor = texture.SampleBilinear(uv, 2);
                 frameBuffer.SetPixel(x, y, drawColor);    
             }
         }

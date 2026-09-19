@@ -35,6 +35,28 @@ public class Texture {
         return new Texture(image.Width, image.Height, pixels);
     }
 
+    public static Texture CreateCheckerboard(
+        int width,
+        int height,
+        int cellSize,
+        Color lightColor,
+        Color darkColor) {
+        if (width <= 0 || height <= 0 || cellSize <= 0) {
+            throw new ArgumentOutOfRangeException(
+                "棋盘格的尺寸与格子大小必须为正数。");
+        }
+
+        var pixels = new Color[width * height];
+        for (int y = 0; y < height; y++) {
+            for (int x = 0; x < width; x++) {
+                var isLight = ((x / cellSize) + (y / cellSize)) % 2 == 0;
+                pixels[y * width + x] = isLight ? lightColor : darkColor;
+            }
+        }
+
+        return new Texture(width, height, pixels);
+    }
+
     public Color SampleNearest(Vector2 uv) {
         //采样方式默认使用Clamp,超出[0, 1]的uv固定在纹理边缘
         var u = Math.Clamp(uv.X, 0f, 1f);
@@ -50,8 +72,8 @@ public class Texture {
 
     public Color SampleBilinear(Vector2 uv) {
         //Clamp?
-        //var u = Math.Clamp(uv.X, 0f, 1f);
-        //var v = Math.Clamp(uv.Y, 0f, 1f);
+        /*var u = Math.Clamp(uv.X, 0f, 1f);
+        var v = Math.Clamp(uv.Y, 0f, 1f);*/
         //Repeat
         var u = uv.X - MathF.Floor(uv.X);
         var v = uv.Y - MathF.Floor(uv.Y);
@@ -65,8 +87,9 @@ public class Texture {
         var y0 = (int)y;
         var x1 = x0 + 1;
         var y1 = y0 + 1;
-        var sampleX1 = Math.Min(x1, Width - 1);
-        var sampleY1 = Math.Min(y1, Height - 1);
+        // Repeat 模式下，右/下邻居越过边缘时回到第 0 列/行。
+        var sampleX1 = x1 % Width;
+        var sampleY1 = y1 % Height;
         var dx0 = x - x0; //这个值表示靠右侧权重
         var dy0 = y - y0; //这个值表示靠下侧权重
         var dx1 = x1 - x; //这个值表示靠左侧权重

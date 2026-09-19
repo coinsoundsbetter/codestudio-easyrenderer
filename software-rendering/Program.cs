@@ -25,39 +25,16 @@ internal static class Program
         var frameBuffer = new FrameBuffer(width, height);
         var depthBuffer = new DepthBuffer(width, height);
 
-        var modelPath = Path.Combine(
-            AppContext.BaseDirectory,
-            "Assets",
-            "Models",
-            "duck.fbx");
-        var model = LoadModel(modelPath);
+        var model = CreateRepeatDemoQuad();
 
-        var texturePath = Path.Combine(
-            AppContext.BaseDirectory,
-            "Assets",
-            "Textures",
-            "duckCM.png");
-        var texture = Texture.Load(texturePath);
-
-        // duck.fbx 的原始坐标约有数十个单位，先缩小并把它的中心移到原点附近。
-        const float modelScale = 0.01f;
-        var modelZ = 0f;
-        const float modelMoveSpeed = 1f;
+        var texture = Texture.CreateCheckerboard(
+            width: 128,
+            height: 128,
+            cellSize: 64,
+            lightColor: new Color(245, 245, 245, 255),
+            darkColor: new Color(35, 35, 35, 255));
 
         while (!Raylib.WindowShouldClose()) {
-
-            var delta = Raylib.GetFrameTime();
-            if (Raylib.IsKeyDown(KeyboardKey.S)) {
-                modelZ -= modelMoveSpeed * delta;
-            }
-            if (Raylib.IsKeyDown(KeyboardKey.W)) {
-                modelZ += modelMoveSpeed * delta;
-            }
-
-            model.Transform =
-                Matrix4x4.CreateScale(modelScale) *
-                Matrix4x4.CreateTranslation(0f, -0.5f, modelZ);
-            
             Raylib.BeginDrawing();
 
             frameBuffer.Clear(Color.Black);
@@ -76,6 +53,26 @@ internal static class Program
         }
 
         Raylib.CloseWindow();
+    }
+
+    private static Model CreateRepeatDemoQuad() {
+        const float halfWidth = 1.2f;
+        const float halfHeight = 0.9f;
+        const float repeatCount = 4f;
+
+        return new Model {
+            Meshes = [new Mesh {
+                // 当前 View 矩阵会翻转屏幕 x 方向；这里按最终屏幕绕序提交顺时针三角形。
+                Vertices = [
+                    new Vertex { X = -halfWidth, Y = -halfHeight, Z = 0f, Color = Color.White, UV = new Vector2(0f, 0f) },
+                    new Vertex { X = -halfWidth, Y = halfHeight, Z = 0f, Color = Color.White, UV = new Vector2(0f, repeatCount) },
+                    new Vertex { X = halfWidth, Y = halfHeight, Z = 0f, Color = Color.White, UV = new Vector2(repeatCount, repeatCount) },
+                    new Vertex { X = halfWidth, Y = -halfHeight, Z = 0f, Color = Color.White, UV = new Vector2(repeatCount, 0f) },
+                ],
+                Indices = [0, 2, 1, 0, 3, 2],
+            }],
+            Transform = Matrix4x4.Identity,
+        };
     }
 
     private static void DrawModel(FrameBuffer frameBuffer, DepthBuffer depthBuffer, Model model, Texture texture, int screenWidth, int screenHeight) {

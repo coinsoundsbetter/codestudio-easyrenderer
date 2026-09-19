@@ -49,8 +49,13 @@ public class Texture {
     }
 
     public Color SampleBilinear(Vector2 uv) {
-        var u = Math.Clamp(uv.X, 0f, 1f);
-        var v = Math.Clamp(uv.Y, 0f, 1f);
+        //Clamp?
+        //var u = Math.Clamp(uv.X, 0f, 1f);
+        //var v = Math.Clamp(uv.Y, 0f, 1f);
+        //Repeat
+        var u = uv.X - MathF.Floor(uv.X);
+        var v = uv.Y - MathF.Floor(uv.Y);
+        
         v = 1f - v;
 
         var x = u * (Width - 1);

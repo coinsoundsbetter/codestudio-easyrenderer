@@ -11,6 +11,14 @@
 
 **完整的六平面齐次视锥裁剪、FBX UV 导入、透视正确插值、双线性过滤、基础 MipMap 链与自动整数 LOD 选择均已接入渲染管线。** `Program.DrawModel` 先将投影结果保存为含 `(x, y, z, w)` 与 `UV` 的 `ClipVertex`，再对每个索引三角形依次执行左、右、下、上、近、远六个平面的裁剪；裁剪后的凸多边形会扇形三角化，再进行透视除法、视口变换并提交给 `Rasterizer.DrawTriangle`。光栅化阶段以重心坐标插值得到当前像素的透视正确 UV，从相邻屏幕位置估计 UV 变化率，自动选择 Mip 层后采样。
 
+### 本轮更新（2026-09-21）
+
+- **三线性过滤已完成并接入当前渲染路径。** `Rasterizer` 保留浮点 `lod` 并传入 `Texture.SampleTrilinear(uv, lod)`；后者将 LOD 限制在合法范围，分别以 `floor(lod)` 和相邻更低分辨率层进行双线性采样，再以 LOD 小数部分混合两次结果的 RGBA。
+- 已检查实现：LOD 在 `MathF.Log2` 后始终为 `float`，除非纹素足迹恰好是 2 的幂，否则通常包含小数；不再有 `(int)MathF.Floor(lod)` 在光栅化阶段提前丢弃该小数部分。最大 Mip 层时上下层会安全地落在同一层。
+- 已构建验证：`dotnet build SoftwareRendering.sln` 通过，0 个警告、0 个错误。
+- 已开始规划第 7 节的代码整理，但尚未迁移任何管线代码。当前 `Vertex` 同时承担模型空间顶点和屏幕空间顶点两种角色；后续目标是拆为 `Vertex`（或 `ModelVertex`）、`ClipVertex`、`ScreenVertex`，并将管线入口迁移到新的 `Renderer.DrawModel(Model model, Texture texture)`。
+- 下次学习焦点先回到**投影矩阵**，暂不继续重构：要重新理解“观察空间位置 → 投影矩阵输出的齐次裁剪空间 `(x,y,z,w)` → 透视除法 → NDC → 视口坐标”的完整过程，尤其是投影为何产生 `w`，以及近大远小如何由除以 `w` 得到。相机参数不应硬编码在 `DrawModel`；待理解后再设计 `Camera` 与 `Renderer` 的职责边界。
+
 ### 已完成的代码与资源
 
 - 安装 `AssimpNetter 6.0.5`，项目目标为 .NET 10；当前项目编译通过，`box.fbx` 已完成实际显示验证。

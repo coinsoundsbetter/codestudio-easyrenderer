@@ -46,8 +46,8 @@
 - `LoadModel` 尚未检查空场景或无网格的返回情况。
 - 保持现有“屏幕顺时针为正面”的规则，但导入模型的外表面绕序需要实际核对。
 - 当前只支持手动指定的一张纹理，尚未读取 FBX 材质并自动寻找纹理。
-- 当前活动渲染路径为 `SampleBilinear`：支持 Repeat 寻址；`SampleNearest` 仍保留 Clamp。自动 LOD 目前只选择整数层，尚未实现三线性过滤、各向异性过滤或光照。
-- 对比固定 `mipmapLevel = 0` 与当前自动 LOD 时，主观上仍观察到闪烁，差异不明显。待复查：先以 `ceil(lod)` 作为故意偏模糊的诊断对照，确认 LOD 数值确实影响结果；再实现三线性过滤，避免 `floor(lod)` 总是偏向较高分辨率层且在整数层边界发生突变。
+- 当前活动渲染路径为 `SampleTrilinear`：支持 Repeat 寻址；`SampleNearest` 仍保留 Clamp。自动 LOD 保留浮点值，在相邻 Mip 层的双线性采样结果之间混合；尚未实现各向异性过滤或光照。
+- 三线性过滤已完成：`Texture.SampleTrilinear` 将 LOD Clamp 后取 `floor(lod)` 与相邻上层，分别调用 `SampleBilinear`，再以 LOD 小数部分混合 RGBA。仍可用 `ceil(lod)` 作为故意偏模糊的诊断对照，确认 LOD 数值确实影响结果。
 - 已实现透视正确 UV 插值：屏幕顶点保存 `InvW = 1 / clip.W`，光栅化时使用 `UV/W` 与 `1/W` 重建像素 UV。
 
 ### 本轮概念与问答总结
@@ -111,7 +111,7 @@
 - [x] 实现透视正确插值，并通过倾斜棋盘纹理理解其与屏幕空间线性插值的差异。
 - [x] 生成完整 MipMap 链，并以手动指定不同层级验证逐级模糊。
 - [x] 根据屏幕空间 UV 变化率自动计算 LOD（当前为整数层选择；视觉验证与三线性过滤待继续）。
-- [ ] 混合相邻 Mip 层，实现三线性过滤（trilinear filtering）。
+- [x] 混合相邻 Mip 层，实现三线性过滤（trilinear filtering）。
 
 ### 7. 复盘
 

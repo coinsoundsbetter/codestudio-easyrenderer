@@ -85,9 +85,8 @@ public class Rasterizer {
                 var lod = MathF.Log2(MathF.Max(rho, 1f));
                 lod = Math.Clamp(lod, 0f, texture.MipLevels - 1);
 
-                // 先选取整数层；下一步的三线性过滤会利用 lod 的小数部分。
-                var mipLevel = (int)MathF.Floor(lod);
-                var drawColor = texture.SampleBilinear(uv, mipLevel);
+                // 三线性过滤：在相邻两个 Mip 层的双线性采样结果之间平滑过渡。
+                var drawColor = texture.SampleTrilinear(uv, lod);
                 frameBuffer.SetPixel(x, y, drawColor);    
             }
         }

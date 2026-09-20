@@ -183,4 +183,24 @@ public class Texture {
             (byte)Math.Clamp(MathF.Round(colorB), 0, 255),
             (byte)255);
     }
+
+    public Color SampleTrilinear(Vector2 uv, float lod) {
+        //保护
+        lod = Math.Clamp(lod, 0f, MipLevels - 1);
+        var lowerLevel = (int)MathF.Floor(lod);
+        //正常上层是lowerLevel+1,保护不超过最大级别
+        var upperLevel = Math.Min(lowerLevel + 1, MipLevels - 1);
+        var t = lod - lowerLevel;
+        var lowerColor = SampleBilinear(uv, lowerLevel);
+        var upperColor = SampleBilinear(uv, upperLevel);
+        return LerpColor(lowerColor, upperColor, t);
+    }
+
+    private static Color LerpColor(Color a, Color b, float t) {
+        return new Color(
+            (byte)Math.Clamp(MathF.Round(a.R + (b.R - a.R) * t), 0, 255),
+            (byte)Math.Clamp(MathF.Round(a.G + (b.G - a.G) * t), 0, 255),
+            (byte)Math.Clamp(MathF.Round(a.B + (b.B - a.B) * t), 0, 255),
+            (byte)Math.Clamp(MathF.Round(a.A + (b.A - a.A) * t), 0, 255));
+    }
 }

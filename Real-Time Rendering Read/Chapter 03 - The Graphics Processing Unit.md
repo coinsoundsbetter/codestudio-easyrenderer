@@ -1,7 +1,7 @@
 # 第 3 章：图形处理器（GPU）
 
 > 来源：《Real-Time Rendering, Fourth Edition》Chapter 3
-> 学习状态：已完成首次阅读；第二次重读已推进至 3.2（3.1、3.2 已重读，3.3–3.10 待重读）
+> 学习状态：已完成首次阅读与第二次重读（3.1–3.10）
 
 ## 一句话概括
 
@@ -215,6 +215,14 @@ Patch 控制点
 | --- | --- |
 | 3.1 数据并行架构 | CPU 低延迟 vs GPU 高吞吐；warp/wavefront 锁步执行；延迟隐藏不是「零延迟」而是「切换 warp 填满等待」；占用率；线程分歧 |
 | 3.2 GPU 管线总览 | 可编程 / 可配置 / 固定功能三分法；逻辑模型 ≠ 物理模型（PSO 不等于独立硬件块） |
+| 3.3 可编程 Shader 阶段 | 统一着色器架构；源码、中间表示与 GPU 指令；uniform/varying/temporary；寄存器压力；静态与动态控制流 |
+| 3.4 可编程着色与 API 演进 | 固定功能到可编程 Shader；Shader Model；低开销 API 将命令、资源与同步控制更多交给引擎 |
+| 3.5 Vertex Shader | Input Assembler；逐顶点独立执行；裁剪空间位置；属性插值接口；法线、硬边与 Instancing |
+| 3.6 Tessellation | Patch、Hull Shader、固定功能 Tessellator 与 Domain Shader；内外细分因子；接缝与微三角形成本 |
+| 3.7 Geometry Shader 与 Stream Output | 逐图元处理、有限几何生成；不规则放大和顺序约束；将几何结果保留在 GPU 缓冲区 |
+| 3.8 Pixel Shader | Fragment 与最终 Pixel 的区别；MRT、discard；2×2 quad、导数、Mipmap；UAV 与数据竞争 |
+| 3.9 Merging Stage | Depth Test 与 Depth Write；Early-Z/Hi-Z；模板、混合、透明排序与输出顺序 |
+| 3.10 Compute Shader | Dispatch、Thread Group、共享内存与 Barrier；GPU 驻留数据；图像处理、模拟、剔除与间接绘制 |
 
 ### 重读中新产生的问答
 
@@ -224,10 +232,19 @@ Patch 控制点
 
 这样做的本质是 SIMD（单指令多数据）：指令和控制逻辑被 warp 内 32 个线程共享，省下的晶体管都去做算术单元，从而能在芯片里塞进几千个 shader core。代价是：一旦 32 个线程走不同的分支（线程分歧），两条路径都得串行执行一遍，全体陪着空转。
 
-### 下次重读起点
+#### Q11：Mipmap 和曲面细分有什么区别？
 
-- 从 3.3 可编程 Shader 阶段继续。
-- 重读过程中注意把「逻辑模型（API 抽象）」和「物理模型（驱动+硬件实际）」分开思考。
+**答：** 两者都可以根据观察距离改变细节等级，但作用对象不同。Mipmap 是纹理的多级预过滤版本：远处一个屏幕像素覆盖大量纹素时，GPU 选择较低分辨率的 mip 层进行采样，以减少闪烁、摩尔纹和无效纹理读取；它不增加或减少模型顶点，也不改变轮廓。Tessellation 则在几何阶段动态增加顶点和三角形，并由 Domain Shader 决定新顶点位置；配合位移时能够改变真实轮廓、深度和阴影。两者可以同时使用：近处提高几何细分并采样高分辨率纹理，远处降低几何细分并采样较低 mip 层。
+
+#### Q12：Depth Test 和 Depth Write 应该如何区分？
+
+**答：** Depth Test 读取深度缓冲并比较当前片元深度，决定该片元能否继续影响画面；Depth Write 则决定通过测试的片元是否把自己的深度写回深度缓冲，成为后续片元的遮挡者。二者是独立状态：不透明物体通常 Test 开、Write 开；普通半透明物体通常 Test 开、Write 关，使其仍会被不透明物体遮挡，但不会过早挡掉稍后混合的其他透明层。关闭 Depth Test 通常意味着忽略场景遮挡；关闭 Depth Write 并不等于关闭 Depth Test。
+
+### 第二次重读收尾
+
+- 已完成 3.1–3.10 全章重读。
+- 已建立从 GPU 数据并行架构，到传统图形管线各阶段，再到 Compute Shader 的完整主线。
+- 已重点厘清逻辑模型与物理实现、Mipmap 与 Tessellation、Depth Test 与 Depth Write 等易混概念。
 
 ## 后续重点复习
 

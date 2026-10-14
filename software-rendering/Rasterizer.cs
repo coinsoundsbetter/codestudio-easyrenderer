@@ -10,7 +10,8 @@ public class Rasterizer {
         FrameBuffer frameBuffer, 
         DepthBuffer depthBuffer,
         Triangle triangle,
-        Texture texture) {
+        Texture texture,
+        Lighting? light = null) {
         
         //叉积 = (横x竖 - 竖x横)
         //平行四边形的面积 = (v0->v1)与(v0->v2)的叉积和
@@ -74,19 +75,20 @@ public class Rasterizer {
                 // 估计当前一个屏幕像素在纹理中跨越了多少纹素。
                 var dUvDx = uvRight - uv;
                 var dUvDy = uvDown - uv;
-                var dxInTexels = new Vector2(
-                    dUvDx.X * texture.Width,
-                    dUvDx.Y * texture.Height);
-                var dyInTexels = new Vector2(
-                    dUvDy.X * texture.Width,
-                    dUvDy.Y * texture.Height);
-
-                var rho = MathF.Max(dxInTexels.Length(), dyInTexels.Length());
-                var lod = MathF.Log2(MathF.Max(rho, 1f));
-                lod = Math.Clamp(lod, 0f, texture.MipLevels - 1);
-
-                // 三线性过滤：在相邻两个 Mip 层的双线性采样结果之间平滑过渡。
-                var drawColor = texture.SampleTrilinear(uv, lod);
+                // 根据 UV 导数选择三线性过滤或最多 8 次采样的各向异性近似。
+                var drawColor = texture.SampleFiltered(uv, dUvDx, dUvDy, light?.UseAnisotropic ?? false);
+                if (light is not null) {
+                    // 与 UV 一样，法线按 1/W 做透视正确插值；Shade 内再归一化。
+                    var invW = area0 * v0.InvW + area1 * v1.InvW + area2 * v2.InvW;
+                    var w0 = area0 * v0.InvW / invW;
+                    var w1 = area1 * v1.InvW / invW;
+                    var w2 = area2 * v2.InvW / invW;
+                    var normal = v0.Normal * w0 + v1.Normal * w1 + v2.Normal * w2;
+                    var tangent = v0.Tangent * w0 + v1.Tangent * w1 + v2.Tangent * w2;
+                    var worldPosition = v0.WorldPosition * w0 + v1.WorldPosition * w1 + v2.WorldPosition * w2;
+                    normal = light.ApplyNormalMap(normal, tangent, uv, dUvDx, dUvDy);
+                    drawColor = light.Shade(drawColor, normal, worldPosition);
+                }
                 frameBuffer.SetPixel(x, y, drawColor);    
             }
         }

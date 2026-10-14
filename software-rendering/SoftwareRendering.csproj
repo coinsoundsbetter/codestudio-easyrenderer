@@ -2,6 +2,8 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
+    <!-- 使用 dotnet 宿主，避开独立 apphost 下的 DirectInput 初始化失败。 -->
+    <UseAppHost>false</UseAppHost>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>

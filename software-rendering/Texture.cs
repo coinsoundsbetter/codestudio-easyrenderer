@@ -31,14 +31,37 @@ public class Texture {
             throw new InvalidDataException("无法读取纹理尺寸。");
         }
         
-        var pixels = new Color[image.Width * image.Height];
-        for (int y = 0; y < image.Height; y++) {
-            for (int x = 0; x < image.Width; x++) {
-                pixels[y * image.Width + x] = Raylib.GetImageColor(image, x, y);
+        try {
+            var pixels = new Color[image.Width * image.Height];
+            for (int y = 0; y < image.Height; y++) {
+                for (int x = 0; x < image.Width; x++) {
+                    pixels[y * image.Width + x] = Raylib.GetImageColor(image, x, y);
+                }
+            }
+            return new Texture(image.Width, image.Height, pixels);
+        } finally {
+            Raylib.UnloadImage(image);
+        }
+    }
+
+    // 从周期高度函数 h(u,v) 的斜率生成切线空间法线，无需外部法线贴图。
+    public static Texture CreateNormalMap(int size = 128) {
+        if (size <= 0) throw new ArgumentOutOfRangeException(nameof(size));
+        var pixels = new Color[size * size];
+        for (int y = 0; y < size; y++) {
+            for (int x = 0; x < size; x++) {
+                var u = (x + 0.5f) / size;
+                var v = 1f - (y + 0.5f) / size;
+                var slopeU = 0.7f * MathF.Cos(2f * MathF.PI * u) * MathF.Sin(2f * MathF.PI * v);
+                var slopeV = 0.7f * MathF.Sin(2f * MathF.PI * u) * MathF.Cos(2f * MathF.PI * v);
+                var normal = Vector3.Normalize(new Vector3(-slopeU, -slopeV, 1f));
+                byte Encode(float component) => (byte)Math.Clamp(MathF.Round((component * 0.5f + 0.5f) * 255f), 0f, 255f);
+                pixels[y * size + x] = new Color(Encode(normal.X), Encode(normal.Y), Encode(normal.Z), (byte)255);
             }
         }
-        
-        return new Texture(image.Width, image.Height, pixels);
+        var result = new Texture(size, size, pixels);
+        result.GenerateMipMaps();
+        return result;
     }
 
     public static Texture CreateVerticalStripeTexture(int width, int height, int stripeWidth) {
@@ -140,18 +163,22 @@ public class Texture {
         //根据mipmap等级,决定当前分辨率
         mipmapLevel = Math.Clamp(mipmapLevel, 0, m_MipLevels.Count - 1);
         var level = m_MipLevels[mipmapLevel];
-        var x = u * (level.Width - 1);
-        var y = v * (level.Height - 1);
+        // 纹素中心位于 (i+0.5)/尺寸；边界两侧都参与过滤，Repeat 接缝才能连续。
+        var x = u * level.Width - 0.5f;
+        var y = v * level.Height - 0.5f;
         //左上角纹素坐标
-        var x0 = (int)x;
-        var y0 = (int)y;
+        var x0 = (int)MathF.Floor(x);
+        var y0 = (int)MathF.Floor(y);
         var x1 = x0 + 1;
         var y1 = y0 + 1;
         /*var sampleX1 = Math.Min(x1, Width - 1);
         var sampleY1 = Math.Min(y1, Height - 1);*/
         //Repeat
-        var sampleX1 = x1 % level.Width;
-        var sampleY1 = y1 % level.Height;
+        static int Wrap(int index, int length) => (index % length + length) % length;
+        var sampleX0 = Wrap(x0, level.Width);
+        var sampleY0 = Wrap(y0, level.Height);
+        var sampleX1 = Wrap(x1, level.Width);
+        var sampleY1 = Wrap(y1, level.Height);
         var dx0 = x - x0; //这个值表示靠右侧权重
         var dy0 = y - y0; //这个值表示靠下侧权重
         var dx1 = x1 - x; //这个值表示靠左侧权重
@@ -161,9 +188,9 @@ public class Texture {
         var weightRightTop = dx0 * dy1;
         var weightLeftBottom = dx1 * dy0;
         var weightRightBottom = dx0 * dy0;
-        var colorLeftTop = level.Pixels[y0 * level.Width + x0];
-        var colorRightTop = level.Pixels[y0 * level.Width + sampleX1];
-        var colorLeftBottom = level.Pixels[sampleY1 * level.Width + x0];
+        var colorLeftTop = level.Pixels[sampleY0 * level.Width + sampleX0];
+        var colorRightTop = level.Pixels[sampleY0 * level.Width + sampleX1];
+        var colorLeftBottom = level.Pixels[sampleY1 * level.Width + sampleX0];
         var colorRightBottom = level.Pixels[sampleY1 * level.Width + sampleX1];
         var colorR = weightLeftTop * colorLeftTop.R +
                      weightLeftBottom * colorLeftBottom.R +
@@ -194,6 +221,45 @@ public class Texture {
         var lowerColor = SampleBilinear(uv, lowerLevel);
         var upperColor = SampleBilinear(uv, upperLevel);
         return LerpColor(lowerColor, upperColor, t);
+    }
+
+    public Color SampleFiltered(Vector2 uv, Vector2 dUvDx, Vector2 dUvDy,
+        bool anisotropic, int maxAnisotropy = 8) {
+        var dx = dUvDx * new Vector2(Width, Height);
+        var dy = dUvDy * new Vector2(Width, Height);
+        if (!anisotropic) {
+            var rho = MathF.Max(dx.Length(), dy.Length());
+            return SampleTrilinear(uv, MathF.Log2(MathF.Max(rho, 1f)));
+        }
+
+        // J 的两列是 dx/dy；J*J^T 的特征值给出纹素足迹的长短轴长度平方。
+        var a = dx.X * dx.X + dy.X * dy.X;
+        var b = dx.X * dx.Y + dy.X * dy.Y;
+        var c = dx.Y * dx.Y + dy.Y * dy.Y;
+        var discriminant = MathF.Sqrt((a - c) * (a - c) + 4f * b * b);
+        var majorSquared = MathF.Max(0f, (a + c + discriminant) * 0.5f);
+        var minorSquared = MathF.Max(0f, (a + c - discriminant) * 0.5f);
+        var major = MathF.Sqrt(majorSquared);
+        var minor = MathF.Sqrt(minorSquared);
+        var direction = MathF.Abs(b) > 1e-8f
+            ? Vector2.Normalize(new Vector2(b, majorSquared - a))
+            : (a >= c ? Vector2.UnitX : Vector2.UnitY);
+
+        // 限制采样次数；超过上限时提高 LOD，保留一些模糊以避免漏采。
+        maxAnisotropy = Math.Clamp(maxAnisotropy, 1, 16);
+        var footprintWidth = MathF.Max(1f, MathF.Max(minor, major / maxAnisotropy));
+        var taps = Math.Clamp((int)MathF.Ceiling(major / footprintWidth), 1, maxAnisotropy);
+        var lod = MathF.Log2(footprintWidth);
+        var spanUv = direction * major / new Vector2(Width, Height);
+        var sum = Vector4.Zero;
+        for (int i = 0; i < taps; i++) {
+            var offset = ((i + 0.5f) / taps - 0.5f) * spanUv;
+            var sample = SampleTrilinear(uv + offset, lod);
+            sum += new Vector4(sample.R, sample.G, sample.B, sample.A);
+        }
+        sum /= taps;
+        return new Color((byte)MathF.Round(sum.X), (byte)MathF.Round(sum.Y),
+            (byte)MathF.Round(sum.Z), (byte)MathF.Round(sum.W));
     }
 
     private static Color LerpColor(Color a, Color b, float t) {
